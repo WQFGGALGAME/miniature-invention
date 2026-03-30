@@ -21,6 +21,9 @@
             <p>松开鼠标加载文件</p>
         </div>
 
+        <!-- 倒计时遮罩 -->
+        <div class="countdown-overlay" id="countdown-overlay">3</div>
+
         <!-- Toast 提示 -->
         <div class="toast-container" id="toast-container"></div>
 
@@ -31,7 +34,10 @@
                 <h1 id="song-title">请加载歌曲</h1>
                 <h2 id="song-artist">未知歌手 <span class="tag">关注</span></h2>
             </div>
-            <div class="header-right" id="settings-btn"><i class="fas fa-share-square"></i></div>
+            <div class="header-right">
+                <i class="fas fa-video" id="record-btn" title="导出视频" style="margin-right: 20px;"></i>
+                <i class="fas fa-share-square" id="settings-btn" title="设置"></i>
+            </div>
         </header>
 
         <!-- 歌词滚动区 -->
@@ -130,6 +136,27 @@
                     </div>
                 </div>
                 <button id="close-settings" class="close-btn">完成并关闭</button>
+            </div>
+        </div>
+
+        <!-- 导出视频弹窗 -->
+        <div class="settings-modal" id="record-modal">
+            <div class="settings-content">
+                <h3>导出视频素材</h3>
+                <p style="font-size: 13px; color: #bbb; margin-bottom: 15px; line-height: 1.5; text-align: center;">
+                    将调用浏览器的屏幕共享功能生成视频。<br>请在弹出的权限窗口中选择 <strong>「当前标签页」</strong>。
+                </p>
+                <div class="setting-item">
+                    <label>导出模式 (为视频后期提供素材):</label>
+                    <select id="record-mode-select" class="custom-select">
+                        <option value="normal">完整画面 (保留背景和可视化特效)</option>
+                        <option value="greenscreen">绿幕素材 (纯绿背景，无UI，方便后期抠像)</option>
+                        <option value="bluescreen">蓝幕素材 (纯蓝背景，防止绿色歌词冲突)</option>
+                        <option value="black">纯黑素材 (纯黑背景，无UI，方便后期滤色)</option>
+                    </select>
+                </div>
+                <button id="start-record-btn" class="close-btn" style="background: #ff4d4f; color: #fff;">开始录制并自动全屏播放</button>
+                <button id="close-record-modal" class="close-btn" style="background: transparent; color: #bbb; margin-top: 10px;">取消</button>
             </div>
         </div>
 

@@ -349,6 +349,222 @@ document.addEventListener('DOMContentLoaded', () => {
     closeSettings.addEventListener('click', () => {
         settingsModal.classList.remove('show');
     });
+
+    // 导出视频弹窗与录制逻辑
+    const recordBtn = document.getElementById('record-btn');
+    const recordModal = document.getElementById('record-modal');
+    const closeRecordModal = document.getElementById('close-record-modal');
+    const startRecordBtn = document.getElementById('start-record-btn');
+    const recordModeSelect = document.getElementById('record-mode-select');
+
+    if (recordBtn) {
+        recordBtn.addEventListener('click', () => {
+            recordModal.classList.add('show');
+        });
+    }
+
+    if (closeRecordModal) {
+        closeRecordModal.addEventListener('click', () => {
+            recordModal.classList.remove('show');
+        });
+    }
+
+    let mediaRecorder;
+    let recordedChunks = [];
+    let recordStream;
+
+    function resetRecordingUI() {
+        appContainer.classList.remove('recording', 'recording-greenscreen', 'recording-bluescreen', 'recording-black');
+        document.body.classList.remove('recording-greenscreen', 'recording-bluescreen', 'recording-black');
+    }
+
+    // 监听全屏退出，若在录制中则自动安全终止
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && mediaRecorder && mediaRecorder.state === 'recording') {
+            showToast('已退出全屏，录制提前结束并保存', 'info-circle');
+            mediaRecorder.stop();
+            audioPlayer.pause();
+        }
+    });
+
+    if (startRecordBtn) {
+        startRecordBtn.addEventListener('click', async () => {
+            if (!audioPlayer.src || audioPlayer.src.endsWith(window.location.href)) {
+                showToast('请先加载一首歌曲才能录制！', 'exclamation-triangle');
+                return;
+            }
+
+            try {
+                // 优化点1：强制要求高帧率和高分辨率，同时保证音频纯净(关闭降噪等影响音乐的策略)，并建议直接录制当前标签页
+                recordStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { 
+                        displaySurface: "browser",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 60 }
+                    },
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        sampleRate: 44100
+                    },
+                    preferCurrentTab: true
+                });
+            } catch (e) {
+                showToast('已取消录制或未获得屏幕共享权限', 'times-circle');
+                return;
+            }
+
+            // 隐藏弹窗
+            recordModal.classList.remove('show');
+            settingsModal.classList.remove('show');
+
+            // 尝试全屏 (受限于浏览器策略，这里在点击事件内，通常会成功)
+            if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+                try {
+                    await document.documentElement.requestFullscreen();
+                    if (fullscreenBtn) fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
+                } catch (e) {
+                    console.warn('全屏请求被拒绝', e);
+                }
+            }
+
+            // 应用录制模式样式
+            const mode = recordModeSelect.value;
+            appContainer.classList.add('recording');
+            if (mode === 'greenscreen') {
+                appContainer.classList.add('recording-greenscreen');
+                document.body.classList.add('recording-greenscreen');
+            } else if (mode === 'bluescreen') {
+                appContainer.classList.add('recording-bluescreen');
+                document.body.classList.add('recording-bluescreen');
+            } else if (mode === 'black') {
+                appContainer.classList.add('recording-black');
+                document.body.classList.add('recording-black');
+            }
+
+            recordedChunks = [];
+            try {
+                // 优化点2：尽可能选择高画质编码，并设定极高的比特率（8Mbps）防止歌词模糊
+                const options = { mimeType: 'video/webm;codecs=vp9' };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options.mimeType = 'video/webm';
+                }
+                options.videoBitsPerSecond = 8000000; 
+
+                mediaRecorder = new MediaRecorder(recordStream, options);
+            } catch (e) {
+                showToast('当前浏览器不支持视频录制', 'exclamation-triangle');
+                resetRecordingUI();
+                return;
+            }
+
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data && e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = function() {
+                resetRecordingUI();
+                
+                // 导出下载
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const title = songTitleEl.textContent || 'lyrics_video';
+                a.download = `${title}_${mode}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+                
+                showToast('视频导出成功！', 'check-circle');
+                
+                // 停止所有的共享轨道
+                if (recordStream) {
+                    recordStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // 退出全屏
+                if (document.fullscreenElement && document.exitFullscreen) {
+                    document.exitFullscreen();
+                    if (fullscreenBtn) fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+                }
+            };
+
+            // 优化点3：监听歌曲结束，自动停止录制前增加2秒缓冲，防止片尾突兀截断
+            function onAudioEndedForRecord() {
+                setTimeout(() => {
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                    }
+                }, 2000);
+                audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
+            }
+            audioPlayer.addEventListener('ended', onAudioEndedForRecord);
+
+            // 监听用户点击系统横幅的"停止共享"
+            if (recordStream.getVideoTracks().length > 0) {
+                recordStream.getVideoTracks()[0].onended = function () {
+                    if (mediaRecorder && mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                        audioPlayer.pause();
+                    }
+                    audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
+                };
+            }
+
+            // 初始化音频可视化
+            initVisualizer();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            // 确保音频重头开始并暂停等待
+            audioPlayer.currentTime = 0;
+            audioPlayer.pause();
+
+            // 优化点4：电影级倒计时启动，避免画面突兀闪烁，给浏览器缓冲时间
+            const countdownEl = document.getElementById('countdown-overlay');
+            if (countdownEl) {
+                countdownEl.classList.add('show');
+                let count = 3;
+                countdownEl.textContent = count;
+                
+                // 触发重绘以重新播放动画
+                countdownEl.classList.remove('pop');
+                void countdownEl.offsetWidth; 
+                countdownEl.classList.add('pop');
+
+                const timer = setInterval(() => {
+                    count--;
+                    if (count > 0) {
+                        countdownEl.textContent = count;
+                        countdownEl.classList.remove('pop');
+                        void countdownEl.offsetWidth;
+                        countdownEl.classList.add('pop');
+                    } else {
+                        clearInterval(timer);
+                        countdownEl.classList.remove('show');
+                        
+                        // 倒计时结束后正式开始录制并播放
+                        mediaRecorder.start(100);
+                        audioPlayer.play();
+                        showToast('录制已开始！按 ESC 或退出全屏可提前结束并保存', 'video');
+                    }
+                }, 1000);
+            } else {
+                // Fallback
+                mediaRecorder.start(100);
+                audioPlayer.play();
+            }
+        });
+    }
     
     // 加载音频
     audioInput.addEventListener('change', (e) => {

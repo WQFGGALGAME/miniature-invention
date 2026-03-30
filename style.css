@@ -648,3 +648,104 @@ body {
         padding: 30px 40px;
     }
 }
+
+/* 下拉框样式 */
+.custom-select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 14px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+.custom-select option {
+    background: #2a2a2a;
+    color: #fff;
+}
+
+/* 录制模式通用隐藏 UI */
+.app-container.recording .header,
+.app-container.recording .controls-container,
+.app-container.recording .toast-container,
+.app-container.recording .drag-overlay {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+.app-container.recording {
+    cursor: none !important;
+}
+
+/* 绿幕模式 */
+.app-container.recording-greenscreen,
+body.recording-greenscreen {
+    background-color: #00FF00 !important;
+    background-image: none !important;
+}
+.app-container.recording-greenscreen .dynamic-bg,
+.app-container.recording-greenscreen .visualizer {
+    display: none !important;
+}
+
+/* 纯黑模式 */
+.app-container.recording-black,
+body.recording-black {
+    background-color: #000000 !important;
+    background-image: none !important;
+}
+.app-container.recording-black .dynamic-bg,
+.app-container.recording-black .visualizer {
+    display: none !important;
+}
+
+/* 蓝幕模式 */
+.app-container.recording-bluescreen,
+body.recording-bluescreen {
+    background-color: #0000FF !important;
+    background-image: none !important;
+}
+.app-container.recording-bluescreen .dynamic-bg,
+.app-container.recording-bluescreen .visualizer {
+    display: none !important;
+}
+
+/* 倒计时遮罩 */
+.countdown-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 150px;
+    color: white;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    text-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.countdown-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.countdown-overlay.pop {
+    animation: popIn 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    30% { transform: scale(1.1); opacity: 1; }
+    80% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
