@@ -61,15 +61,33 @@ body {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0%, transparent 60%);
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.08) 0%, transparent 60%);
     animation: rotateBg 30s linear infinite;
     pointer-events: none;
     z-index: 0;
+    transition: opacity 0.1s ease-out;
 }
 
 @keyframes rotateBg {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* 音频可视化画布 */
+.visualizer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.5;
+    transition: opacity 0.5s ease;
+}
+
+.app-container.idle .visualizer {
+    opacity: 0.2;
 }
 
 /* 拖拽遮罩 */
@@ -206,6 +224,7 @@ body {
     flex: 1;
     overflow: hidden;
     position: relative;
+    z-index: 5;
     /* 上下边缘渐变模糊效果 */
     mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
@@ -415,6 +434,27 @@ body {
     /* 默认显示或者hover显示 */
 }
 
+.progress-tooltip {
+    position: absolute;
+    top: -30px;
+    left: 0%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--active-color);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, left 0s;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.progress-bar-wrapper:hover .progress-tooltip {
+    opacity: 1;
+}
+
 .playback-controls {
     display: flex;
     justify-content: space-between;
@@ -428,8 +468,10 @@ body {
     transition: color 0.2s;
 }
 
-.playback-controls i:hover {
+.playback-controls i:hover,
+.playback-controls i.active {
     color: var(--active-color);
+    text-shadow: 0 0 10px rgba(255,255,255,0.3);
 }
 
 .play-btn-wrapper {

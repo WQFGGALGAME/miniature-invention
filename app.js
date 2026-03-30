@@ -33,6 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const songTitleEl = document.getElementById('song-title');
     const songArtistEl = document.getElementById('song-artist');
     
+    // 新增增强控制 DOM
+    const loopBtn = document.getElementById('loop-btn');
+    const progressTooltip = document.getElementById('progress-tooltip');
+    
     // 扩展功能 DOM
     const appContainer = document.getElementById('app');
     const dragOverlay = document.getElementById('drag-overlay');
@@ -51,6 +55,66 @@ document.addEventListener('DOMContentLoaded', () => {
     let timelineOffset = 0;
     let idleTimer;
     let currentVolume = 1;
+    
+    // 新增变量
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const visualizerCanvas = document.getElementById('visualizer');
+    const canvasCtx = visualizerCanvas ? visualizerCanvas.getContext('2d') : null;
+    let currentAudioUrl = null;
+    let audioCtx, analyser, sourceNode, visualizerDataArray;
+    let isVisualizerInit = false;
+
+    // --- LocalStorage 持久化功能 ---
+    function saveSetting(key, value) {
+        localStorage.setItem(`karaoke_${key}`, value);
+    }
+
+    function loadSettings() {
+        const savedVolume = localStorage.getItem('karaoke_volume');
+        if (savedVolume !== null) {
+            currentVolume = parseFloat(savedVolume);
+            audioPlayer.volume = currentVolume;
+            updateVolumeUI(currentVolume);
+        }
+
+        const savedBg = localStorage.getItem('karaoke_bgColor');
+        if (savedBg) {
+            document.documentElement.style.setProperty('--bg-color', savedBg);
+            bgColorInput.value = savedBg;
+            bgColorVal.textContent = savedBg;
+        }
+
+        const savedInactive = localStorage.getItem('karaoke_inactiveColor');
+        if (savedInactive) {
+            document.documentElement.style.setProperty('--inactive-color', savedInactive);
+            inactiveColorInput.value = savedInactive;
+            inactiveColorVal.textContent = savedInactive;
+        }
+
+        const savedActive = localStorage.getItem('karaoke_activeColor');
+        if (savedActive) {
+            document.documentElement.style.setProperty('--active-color', savedActive);
+            activeColorInput.value = savedActive;
+            activeColorVal.textContent = savedActive;
+        }
+
+        const savedFontSize = localStorage.getItem('karaoke_fontSize');
+        if (savedFontSize) {
+            document.documentElement.style.setProperty('--lyric-font-size', `${savedFontSize}px`);
+            fontSizeInput.value = savedFontSize;
+            fontSizeVal.textContent = `${savedFontSize}px`;
+        }
+
+        const savedOffset = localStorage.getItem('karaoke_timelineOffset');
+        if (savedOffset) {
+            timelineOffset = parseFloat(savedOffset);
+            timelineOffsetInput.value = timelineOffset;
+            timelineOffsetVal.textContent = `${timelineOffset > 0 ? '+' : ''}${timelineOffset}s`;
+        }
+    }
+    
+    // 初始化加载设置
+    loadSettings();
     
     // Toast 提示功能
     function showToast(message, icon = 'info-circle') {
@@ -106,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
         audioPlayer.volume = pos;
         currentVolume = pos;
         updateVolumeUI(pos);
+        saveSetting('volume', pos);
     }
     
     volumeWrapper.addEventListener('mousedown', (e) => {
@@ -160,18 +225,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 播放/暂停控制
-    playBtn.addEventListener('click', () => {
+    // 播放/暂停控制统一逻辑
+    function togglePlay() {
         if (!audioPlayer.src || audioPlayer.src.endsWith(window.location.href)) {
             settingsModal.classList.add('show');
             return;
+        }
+        initVisualizer();
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
         }
         if (audioPlayer.paused) {
             audioPlayer.play();
         } else {
             audioPlayer.pause();
         }
-    });
+    }
+
+    playBtn.addEventListener('click', togglePlay);
     
     audioPlayer.addEventListener('play', () => {
         playIcon.className = 'fas fa-pause';
@@ -246,6 +317,29 @@ document.addEventListener('DOMContentLoaded', () => {
             audioPlayer.currentTime = pos * audioPlayer.duration;
         }
     });
+
+    // 进度条悬浮时间提示
+    if (progressTooltip && progressWrapper) {
+        progressWrapper.addEventListener('mousemove', (e) => {
+            if (!audioPlayer.duration) return;
+            const rect = progressWrapper.getBoundingClientRect();
+            let pos = (e.clientX - rect.left) / rect.width;
+            pos = Math.max(0, Math.min(1, pos));
+            progressTooltip.style.left = `${pos * 100}%`;
+            progressTooltip.textContent = formatTime(pos * audioPlayer.duration);
+        });
+    }
+
+    // 播放模式切换 (单曲循环/列表)
+    let isLooping = false;
+    if (loopBtn) {
+        loopBtn.addEventListener('click', () => {
+            isLooping = !isLooping;
+            audioPlayer.loop = isLooping;
+            loopBtn.className = isLooping ? 'fas fa-redo active' : 'fas fa-list-ul';
+            showToast(isLooping ? '开启单曲循环' : '顺序播放', isLooping ? 'sync' : 'list-ul');
+        });
+    }
     
     // 设置弹窗
     settingsBtn.addEventListener('click', () => {
@@ -277,8 +371,11 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('请上传有效的音频文件 (MP3/WAV/FLAC)', 'exclamation-circle');
             return;
         }
-        const url = URL.createObjectURL(file);
-        audioPlayer.src = url;
+        if (currentAudioUrl) {
+            URL.revokeObjectURL(currentAudioUrl);
+        }
+        currentAudioUrl = URL.createObjectURL(file);
+        audioPlayer.src = currentAudioUrl;
         const defaultTitle = file.name.replace(/\.[^/.]+$/, "");
         songTitleEl.textContent = defaultTitle;
         songArtistEl.innerHTML = `未知歌手 <span class="tag">本地</span>`;
@@ -349,23 +446,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // 自定义颜色
-    function updateColor(input, valEl, cssVar) {
+    function updateColor(input, valEl, cssVar, storageKey) {
         input.addEventListener('input', (e) => {
             const color = e.target.value;
             document.documentElement.style.setProperty(cssVar, color);
             valEl.textContent = color;
+            if (storageKey) saveSetting(storageKey, color);
         });
     }
     
-    updateColor(bgColorInput, bgColorVal, '--bg-color');
-    updateColor(inactiveColorInput, inactiveColorVal, '--inactive-color');
-    updateColor(activeColorInput, activeColorVal, '--active-color');
+    updateColor(bgColorInput, bgColorVal, '--bg-color', 'bgColor');
+    updateColor(inactiveColorInput, inactiveColorVal, '--inactive-color', 'inactiveColor');
+    updateColor(activeColorInput, activeColorVal, '--active-color', 'activeColor');
     
     // 字体大小调节
     fontSizeInput.addEventListener('input', (e) => {
         const size = e.target.value;
         document.documentElement.style.setProperty('--lyric-font-size', `${size}px`);
         fontSizeVal.textContent = `${size}px`;
+        saveSetting('fontSize', size);
         // 更新滚动位置
         if (currentLineIndex !== -1 && !audioPlayer.paused) {
             updateLyricsProgress();
@@ -376,6 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
     timelineOffsetInput.addEventListener('input', (e) => {
         timelineOffset = parseFloat(e.target.value);
         timelineOffsetVal.textContent = `${timelineOffset > 0 ? '+' : ''}${timelineOffset}s`;
+        saveSetting('timelineOffset', timelineOffset);
     });
     
     // 解析 LRC (支持普通LRC和逐字LRC)
@@ -682,12 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
         switch(e.code) {
             case 'Space':
                 e.preventDefault();
-                if (!audioPlayer.src || audioPlayer.src.endsWith(window.location.href)) return;
-                if (audioPlayer.paused) {
-                    audioPlayer.play();
-                } else {
-                    audioPlayer.pause();
-                }
+                togglePlay();
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
@@ -705,9 +800,135 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     function formatTime(seconds) {
-        if (isNaN(seconds)) return "00:00";
-        const min = Math.floor(seconds / 60);
+        if (isNaN(seconds) || !isFinite(seconds)) return "00:00";
+        const h = Math.floor(seconds / 3600);
+        const min = Math.floor((seconds % 3600) / 60);
         const sec = Math.floor(seconds % 60);
+        if (h > 0) {
+            return `${h}:${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+        }
         return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
     }
+
+    // --- 音频可视化 (Web Audio API) ---
+    function initVisualizer() {
+        if (isVisualizerInit || !window.AudioContext && !window.webkitAudioContext) return;
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 128; // 获取 64 个频率数据
+            
+            sourceNode = audioCtx.createMediaElementSource(audioPlayer);
+            sourceNode.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            
+            visualizerDataArray = new Uint8Array(analyser.frequencyBinCount);
+            isVisualizerInit = true;
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            drawVisualizer();
+        } catch (e) {
+            console.error('音频可视化初始化失败:', e);
+        }
+    }
+
+    let resizeTimer;
+    function resizeCanvas() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (visualizerCanvas) {
+                visualizerCanvas.width = visualizerCanvas.clientWidth;
+                visualizerCanvas.height = visualizerCanvas.clientHeight;
+            }
+        }, 100);
+    }
+
+    function drawVisualizer() {
+        requestAnimationFrame(drawVisualizer);
+        if (!analyser || !canvasCtx || !visualizerCanvas) return;
+        
+        analyser.getByteFrequencyData(visualizerDataArray);
+        
+        const width = visualizerCanvas.width;
+        const height = visualizerCanvas.height;
+        
+        canvasCtx.clearRect(0, 0, width, height);
+        
+        const barWidth = (width / visualizerDataArray.length) * 1.5;
+        let barHeight;
+        let x = 0;
+        
+        const activeColor = getComputedStyle(document.documentElement).getPropertyValue('--active-color').trim() || '#ffffff';
+        
+        // 极致体验：提取低频(Bass)能量，用于背景律动
+        let bassSum = 0;
+        const bassCount = Math.min(10, visualizerDataArray.length);
+        for (let i = 0; i < bassCount; i++) {
+            bassSum += visualizerDataArray[i];
+        }
+        const bassAvg = bassSum / (bassCount || 1);
+        const dynamicBg = document.querySelector('.dynamic-bg');
+        if (dynamicBg) {
+            // 根据低音动态调整背景亮度，极具沉浸感
+            dynamicBg.style.opacity = 0.3 + (bassAvg / 255) * 0.7;
+        }
+
+        // 极致体验：发光霓虹效果
+        canvasCtx.shadowBlur = 15;
+        canvasCtx.shadowColor = activeColor;
+        
+        for (let i = 0; i < visualizerDataArray.length; i++) {
+            barHeight = (visualizerDataArray[i] / 255) * height;
+            
+            canvasCtx.fillStyle = activeColor;
+            // 柱状图越低越透明
+            canvasCtx.globalAlpha = 0.3 + (visualizerDataArray[i] / 255) * 0.7;
+            
+            // 绘制带有圆角的柱状图以提升质感
+            canvasCtx.beginPath();
+            if (canvasCtx.roundRect) {
+                canvasCtx.roundRect(x, height - barHeight, barWidth - 2, barHeight, [4, 4, 0, 0]);
+            } else {
+                canvasCtx.fillRect(x, height - barHeight, barWidth - 2, barHeight);
+            }
+            canvasCtx.fill();
+            
+            x += barWidth;
+        }
+        canvasCtx.shadowBlur = 0;
+        canvasCtx.globalAlpha = 1.0;
+    }
+
+    // --- 全屏模式 ---
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    showToast('全屏请求被拒绝', 'exclamation-triangle');
+                });
+                fullscreenBtn.innerHTML = '<i class="fas fa-compress"></i>';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+                fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+            }
+        });
+    }
+
+    // 监听全屏状态变化，更新图标
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && fullscreenBtn) {
+            fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+        }
+    });
+
+    // --- 音频错误处理 ---
+    audioPlayer.addEventListener('error', (e) => {
+        showToast('音频加载或播放出错，文件可能已损坏', 'exclamation-triangle');
+        playIcon.className = 'fas fa-play';
+        cancelAnimationFrame(animationFrameId);
+    });
+
 });

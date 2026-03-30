@@ -12,6 +12,9 @@
         <!-- 动态背景 -->
         <div class="dynamic-bg"></div>
         
+        <!-- 音频可视化画布 -->
+        <canvas id="visualizer" class="visualizer"></canvas>
+        
         <!-- 拖拽提示遮罩 -->
         <div class="drag-overlay" id="drag-overlay">
             <i class="fas fa-file-audio"></i>
@@ -23,7 +26,7 @@
 
         <!-- 顶部信息栏 -->
         <header class="header">
-            <div class="header-left"><i class="fas fa-chevron-down"></i></div>
+            <div class="header-left" id="fullscreen-btn" title="全屏模式"><i class="fas fa-expand"></i></div>
             <div class="song-info">
                 <h1 id="song-title">请加载歌曲</h1>
                 <h2 id="song-artist">未知歌手 <span class="tag">关注</span></h2>
@@ -62,6 +65,7 @@
                     <div class="progress-bar">
                         <div class="progress" id="progress"></div>
                         <div class="progress-thumb" id="progress-thumb"></div>
+                        <div class="progress-tooltip" id="progress-tooltip">00:00</div>
                     </div>
                 </div>
                 <span id="total-time">00:00</span>
@@ -74,7 +78,7 @@
                     <i class="fas fa-play"></i>
                 </div>
                 <i class="fas fa-step-forward" id="next-btn"></i>
-                <i class="fas fa-list-ul"></i>
+                <i class="fas fa-list-ul" id="loop-btn" title="切换播放模式"></i>
             </div>
         </footer>
 
