@@ -144,16 +144,29 @@
             <div class="settings-content">
                 <h3>导出视频素材</h3>
                 <p style="font-size: 13px; color: #bbb; margin-bottom: 15px; line-height: 1.5; text-align: center;">
-                    将调用浏览器的屏幕共享功能生成视频。<br>请在弹出的权限窗口中选择 <strong>「当前标签页」</strong>。
+                    使用内置渲染引擎，生成极高质量素材。<br><strong>透明背景</strong> 模式导出后可直接拖入剪辑软件使用，无需抠像！
                 </p>
                 <div class="setting-item">
                     <label>导出模式 (为视频后期提供素材):</label>
                     <select id="record-mode-select" class="custom-select">
-                        <option value="normal">完整画面 (保留背景和可视化特效)</option>
-                        <option value="greenscreen">绿幕素材 (纯绿背景，无UI，方便后期抠像)</option>
-                        <option value="bluescreen">蓝幕素材 (纯蓝背景，防止绿色歌词冲突)</option>
-                        <option value="black">纯黑素材 (纯黑背景，无UI，方便后期滤色)</option>
+                        <option value="transparent">直接透明通道 (推荐，支持绝大多数剪辑软件)</option>
+                        <option value="greenscreen">绿幕背景 (纯绿背景，传统抠像方式)</option>
+                        <option value="bluescreen">蓝幕背景 (纯蓝背景，防止与绿色歌词冲突)</option>
+                        <option value="black">纯黑背景 (纯黑背景，方便使用滤色模式)</option>
+                        <option value="screen">传统屏幕录制 (走系统屏幕共享，需授权)</option>
                     </select>
+                </div>
+                <div class="setting-item">
+                    <label>导出画幅与分辨率 (决定素材尺寸):</label>
+                    <select id="record-resolution-select" class="custom-select">
+                        <option value="1920x1080">1920x1080 (16:9 电脑横屏/B站西瓜等)</option>
+                        <option value="1080x1920">1080x1920 (9:16 手机竖屏/抖音快手等)</option>
+                        <option value="auto">自适应当前窗口尺寸</option>
+                    </select>
+                </div>
+                <div class="setting-item" style="flex-direction: row; align-items: center; gap: 10px; margin-bottom: 25px;">
+                    <input type="checkbox" id="record-vis-checkbox" checked style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="record-vis-checkbox" style="margin: 0; font-size: 13px; cursor: pointer; color: #bbb;">录制时保留底部的音频可视化与动态光晕</label>
                 </div>
                 <button id="start-record-btn" class="close-btn" style="background: #ff4d4f; color: #fff;">开始录制并自动全屏播放</button>
                 <button id="close-record-modal" class="close-btn" style="background: transparent; color: #bbb; margin-top: 10px;">取消</button>
@@ -161,6 +174,12 @@
         </div>
 
         <audio id="audio-player"></audio>
+    </div>
+
+    <!-- 录制中呼吸灯提示 -->
+    <div id="recording-indicator" class="recording-indicator">
+        <div class="dot"></div>
+        <span>正在后台渲染并录制高质量素材中... (按ESC或退出全屏停止)</span>
     </div>
 
     <script src="app.js"></script>

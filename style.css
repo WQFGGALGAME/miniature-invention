@@ -749,3 +749,40 @@ body.recording-bluescreen {
     80% { transform: scale(1); opacity: 1; }
     100% { transform: scale(1.5); opacity: 0; }
 }
+
+/* 录制状态呼吸灯 */
+.recording-indicator {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.recording-indicator.show {
+    display: flex;
+}
+
+.recording-indicator .dot {
+    width: 12px;
+    height: 12px;
+    background-color: #ff4d4f;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; box-shadow: 0 0 10px #ff4d4f; }
+    50% { opacity: 0.3; box-shadow: 0 0 0px transparent; }
+    100% { opacity: 1; box-shadow: 0 0 10px #ff4d4f; }
+}

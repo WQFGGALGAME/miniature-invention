@@ -387,40 +387,386 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 倒计时并执行回调
+    function startCountdownAndRun(callback) {
+        audioPlayer.currentTime = 0;
+        audioPlayer.pause();
+        const countdownEl = document.getElementById('countdown-overlay');
+        if (countdownEl) {
+            countdownEl.classList.add('show');
+            let count = 3;
+            countdownEl.textContent = count;
+            countdownEl.classList.remove('pop');
+            void countdownEl.offsetWidth; 
+            countdownEl.classList.add('pop');
+
+            const timer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownEl.textContent = count;
+                    countdownEl.classList.remove('pop');
+                    void countdownEl.offsetWidth;
+                    countdownEl.classList.add('pop');
+                } else {
+                    clearInterval(timer);
+                    countdownEl.classList.remove('show');
+                    callback();
+                }
+            }, 1000);
+        } else {
+            callback();
+        }
+    }
+
+    // 内部高画质/透明渲染引擎录制 (极致优化版)
+    async function startInternalEngineRecording(mode, keepVis, resolutionMode) {
+        appContainer.classList.add('recording');
+        const recordingIndicator = document.getElementById('recording-indicator');
+        if (recordingIndicator) recordingIndicator.classList.add('show');
+        
+        // 1. 动态分辨率策略 (解决拉伸变形问题)
+        const rCanvas = document.createElement('canvas');
+        let targetW = 1920;
+        let targetH = 1080;
+        
+        if (resolutionMode === '1080x1920') {
+            targetW = 1080;
+            targetH = 1920;
+        } else if (resolutionMode === 'auto') {
+            targetW = window.innerWidth;
+            targetH = window.innerHeight;
+            // 保证偶数分辨率，兼容编码器
+            if (targetW % 2 !== 0) targetW += 1;
+            if (targetH % 2 !== 0) targetH += 1;
+        }
+        
+        rCanvas.width = targetW;
+        rCanvas.height = targetH;
+        const rCtx = rCanvas.getContext('2d', { alpha: true }); // 确保支持透明通道
+        
+        // 计算居中缩放比例 (Contain 策略，保证完美不拉伸)
+        const winW = window.innerWidth;
+        const winH = window.innerHeight;
+        const scale = Math.min(targetW / winW, targetH / winH);
+        const offsetX = (targetW - winW * scale) / 2;
+        const offsetY = (targetH - winH * scale) / 2;
+
+        let isRecording = true;
+        let destNode = null;
+        let stream;
+        
+        try {
+            const videoStream = rCanvas.captureStream(60); 
+            if (audioCtx && sourceNode) {
+                destNode = audioCtx.createMediaStreamDestination();
+                sourceNode.connect(destNode);
+                const audioTracks = destNode.stream.getAudioTracks();
+                if (audioTracks.length > 0) {
+                    stream = new MediaStream([videoStream.getVideoTracks()[0], audioTracks[0]]);
+                } else {
+                    stream = videoStream;
+                }
+            } else {
+                stream = videoStream;
+            }
+        } catch(e) {
+            showToast('创建内部媒体流失败', 'times-circle');
+            resetRecordingUI();
+            if (recordingIndicator) recordingIndicator.classList.remove('show');
+            return;
+        }
+
+        const options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+            options.mimeType = 'video/webm;codecs=vp8';
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/webm';
+        }
+        
+        try {
+            mediaRecorder = new MediaRecorder(stream, options);
+        } catch(e) {
+            showToast('当前浏览器不支持所选视频编码格式', 'exclamation-triangle');
+            resetRecordingUI();
+            if (recordingIndicator) recordingIndicator.classList.remove('show');
+            return;
+        }
+
+        recordedChunks = [];
+        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            isRecording = false;
+            resetRecordingUI();
+            if (recordingIndicator) recordingIndicator.classList.remove('show');
+            if (destNode) sourceNode.disconnect(destNode);
+            
+            const blob = new Blob(recordedChunks, { type: options.mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const title = songTitleEl.textContent || 'lyrics_video';
+            a.download = `${title}_${mode}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+            showToast('视频导出成功！', 'check-circle');
+            
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen();
+                if (fullscreenBtn) fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+            }
+        };
+
+        function onAudioEndedForRecord() {
+            setTimeout(() => { if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop(); }, 2000);
+            audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
+        }
+        audioPlayer.addEventListener('ended', onAudioEndedForRecord);
+
+        const activeColor = getComputedStyle(document.documentElement).getPropertyValue('--active-color').trim() || '#ffffff';
+        const inactiveColor = getComputedStyle(document.documentElement).getPropertyValue('--inactive-color').trim() || '#888888';
+
+        // 2. 性能极致化：预缓存 DOM 布局，彻底消除每帧 getBoundingClientRect 带来的卡顿！
+        // 先临时移除滚动效果，获取绝对静态布局
+        const origTransform = lyricsWrapper.style.transform;
+        lyricsWrapper.style.transform = 'translateY(0px)';
+        const wrapperRectBase = lyricsWrapper.getBoundingClientRect();
+        
+        const cachedLines = Array.from(lyricsWrapper.querySelectorAll('.lyric-line')).map(lineEl => {
+            const spans = Array.from(lineEl.querySelectorAll('span')).map(span => {
+                const rect = span.getBoundingClientRect();
+                return {
+                    el: span,
+                    text: span.textContent,
+                    // 计算相对 wrapper 顶部的相对坐标，这是恒定不变的
+                    relX: rect.left - wrapperRectBase.left,
+                    relY: rect.top - wrapperRectBase.top,
+                    width: rect.width,
+                    height: rect.height
+                };
+            });
+            return {
+                el: lineEl,
+                text: lineEl.textContent,
+                spans: spans,
+                relY: lineEl.offsetTop,
+                height: lineEl.offsetHeight
+            };
+        });
+        // 恢复原有 transform
+        lyricsWrapper.style.transform = origTransform;
+
+        // 3. 高性能渲染循环
+        function drawRecordFrame() {
+            if (!isRecording) return;
+            requestAnimationFrame(drawRecordFrame);
+            
+            // 彻底清空画布（对于透明模式这是必须的，保证 Alpha = 0）
+            rCtx.clearRect(0, 0, targetW, targetH);
+            
+            // 纯色背景填充
+            if (mode === 'greenscreen') { rCtx.fillStyle = '#00FF00'; rCtx.fillRect(0,0,targetW,targetH); }
+            else if (mode === 'bluescreen') { rCtx.fillStyle = '#0000FF'; rCtx.fillRect(0,0,targetW,targetH); }
+            else if (mode === 'black') { rCtx.fillStyle = '#000000'; rCtx.fillRect(0,0,targetW,targetH); }
+            // transparent 模式直接留空即可！
+            
+            rCtx.save();
+            // 应用居中等比缩放矩阵
+            rCtx.translate(offsetX, offsetY);
+            rCtx.scale(scale, scale);
+            
+            // 可视化层
+            if (keepVis) {
+                let bassAvg = 0;
+                if (visualizerDataArray) {
+                    let sum = 0;
+                    for(let i=0; i<10; i++) sum += visualizerDataArray[i];
+                    bassAvg = sum / 10;
+                }
+                rCtx.save();
+                rCtx.translate(winW/2, winH/2);
+                rCtx.rotate((Date.now() % 30000) / 30000 * Math.PI * 2);
+                const grad = rCtx.createRadialGradient(0, 0, 0, 0, 0, Math.max(winW, winH));
+                grad.addColorStop(0, `rgba(255,255,255,${0.08 * (0.3 + bassAvg/255*0.7)})`);
+                grad.addColorStop(0.6, 'transparent');
+                rCtx.fillStyle = grad;
+                rCtx.fillRect(-winW, -winH, winW*2, winH*2);
+                rCtx.restore();
+                
+                if (visualizerCanvas && visualizerCanvas.width > 0) {
+                    const vh = winH * 0.6;
+                    rCtx.drawImage(visualizerCanvas, 0, winH - vh, winW, vh);
+                }
+            }
+            
+            // 歌词渲染层 (极速模式)
+            // 动态读取当前的 wrapper 位置 (Y轴偏移量)
+            const currentWrapperRect = lyricsWrapper.getBoundingClientRect();
+            // 只需要知道当前的动态 top 和 left
+            const wrapX = currentWrapperRect.left;
+            const wrapY = currentWrapperRect.top;
+
+            cachedLines.forEach(line => {
+                // 计算该行在当前帧的绝对 Y 坐标
+                const absTop = wrapY + line.relY;
+                // 剔除屏幕外的行，大幅提升性能
+                if (absTop + line.height < 0 || absTop > winH) return;
+                
+                const isActive = line.el.classList.contains('active');
+                const compStyle = getComputedStyle(line.el);
+                const currentFontSize = parseFloat(compStyle.fontSize);
+                
+                rCtx.save();
+                rCtx.textAlign = 'left';
+                rCtx.textBaseline = 'top'; // 改用 top 对齐，配合 offsetTop 更精准
+                rCtx.font = `${compStyle.fontWeight} ${currentFontSize}px sans-serif`;
+                
+                if (!isActive) rCtx.globalAlpha = 0.6;
+                
+                if (line.spans.length > 0) {
+                    line.spans.forEach(span => {
+                        const x = wrapX + span.relX;
+                        const y = wrapY + span.relY;
+                        
+                        const progStr = span.el.style.getPropertyValue('--progress') || '0%';
+                        const prog = parseFloat(progStr) / 100;
+                        
+                        if (isActive) {
+                            if (prog > 0 && prog < 1) {
+                                // 更精准的丝滑卡拉OK渐变
+                                const grad = rCtx.createLinearGradient(x, 0, x + span.width, 0);
+                                grad.addColorStop(0, activeColor);
+                                grad.addColorStop(Math.max(0, prog - 0.01), activeColor); // 制造锐利边缘
+                                grad.addColorStop(Math.min(1, prog + 0.01), inactiveColor);
+                                grad.addColorStop(1, inactiveColor);
+                                rCtx.fillStyle = grad;
+                            } else if (prog >= 1) {
+                                rCtx.fillStyle = activeColor;
+                            } else {
+                                rCtx.fillStyle = inactiveColor;
+                            }
+                            // 极简辉光，提升视频质感
+                            rCtx.shadowColor = 'rgba(0,0,0,0.6)';
+                            rCtx.shadowBlur = 10;
+                            rCtx.shadowOffsetY = 2;
+                        } else {
+                            rCtx.fillStyle = inactiveColor;
+                        }
+                        
+                        // 修正 Y 坐标偏移以匹配 DOM 的 line-height 居中
+                        // DOM 里的文字由于 line-height 可能不是贴着顶部的
+                        const yOffset = (span.height - currentFontSize) / 2;
+                        rCtx.fillText(span.text, x, y + yOffset);
+                    });
+                } else {
+                    rCtx.textAlign = 'center';
+                    rCtx.fillStyle = inactiveColor;
+                    const x = wrapX + currentWrapperRect.width / 2;
+                    // 对单行文本进行近似渲染
+                    rCtx.fillText(line.text, x, absTop + (line.height - currentFontSize) / 2);
+                }
+                rCtx.restore();
+            });
+            
+            rCtx.restore(); // 恢复矩阵
+        }
+
+        startCountdownAndRun(() => {
+            mediaRecorder.start(100);
+            audioPlayer.play();
+            drawRecordFrame();
+        });
+    }
+
+    // 传统系统屏幕共享录制 (保留作为兼容和完整画面捕获)
+    async function startScreenRecording(mode) {
+        try {
+            recordStream = await navigator.mediaDevices.getDisplayMedia({
+                video: { displaySurface: "browser", width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } },
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, sampleRate: 44100 },
+                preferCurrentTab: true
+            });
+        } catch (e) {
+            showToast('已取消录制或未获得屏幕共享权限', 'times-circle');
+            return;
+        }
+
+        appContainer.classList.add('recording');
+        
+        recordedChunks = [];
+        try {
+            const options = { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 8000000 };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/webm';
+            mediaRecorder = new MediaRecorder(recordStream, options);
+        } catch (e) {
+            showToast('当前浏览器不支持视频录制', 'exclamation-triangle');
+            resetRecordingUI();
+            return;
+        }
+
+        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            resetRecordingUI();
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const title = songTitleEl.textContent || 'lyrics_video';
+            a.download = `${title}_screen.webm`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+            showToast('视频导出成功！', 'check-circle');
+            
+            if (recordStream) recordStream.getTracks().forEach(track => track.stop());
+            if (document.fullscreenElement && document.exitFullscreen) {
+                document.exitFullscreen();
+                if (fullscreenBtn) fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
+            }
+        };
+
+        function onAudioEndedForRecord() {
+            setTimeout(() => {
+                if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+            }, 2000);
+            audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
+        }
+        audioPlayer.addEventListener('ended', onAudioEndedForRecord);
+
+        if (recordStream.getVideoTracks().length > 0) {
+            recordStream.getVideoTracks()[0].onended = function () {
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    audioPlayer.pause();
+                }
+                audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
+            };
+        }
+
+        startCountdownAndRun(() => {
+            mediaRecorder.start(100);
+            audioPlayer.play();
+            showToast('系统屏幕录制已开始！按 ESC 或退出全屏可提前结束', 'video');
+        });
+    }
+
     if (startRecordBtn) {
+        const recordVisCheckbox = document.getElementById('record-vis-checkbox');
+        
         startRecordBtn.addEventListener('click', async () => {
             if (!audioPlayer.src || audioPlayer.src.endsWith(window.location.href)) {
                 showToast('请先加载一首歌曲才能录制！', 'exclamation-triangle');
                 return;
             }
 
-            try {
-                // 优化点1：强制要求高帧率和高分辨率，同时保证音频纯净(关闭降噪等影响音乐的策略)，并建议直接录制当前标签页
-                recordStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { 
-                        displaySurface: "browser",
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        frameRate: { ideal: 60 }
-                    },
-                    audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false,
-                        sampleRate: 44100
-                    },
-                    preferCurrentTab: true
-                });
-            } catch (e) {
-                showToast('已取消录制或未获得屏幕共享权限', 'times-circle');
-                return;
-            }
+            const mode = recordModeSelect.value;
+            const resolutionMode = document.getElementById('record-resolution-select').value;
+            const keepVis = recordVisCheckbox ? recordVisCheckbox.checked : true;
 
             // 隐藏弹窗
             recordModal.classList.remove('show');
             settingsModal.classList.remove('show');
 
-            // 尝试全屏 (受限于浏览器策略，这里在点击事件内，通常会成功)
+            // 尝试全屏
             if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
                 try {
                     await document.documentElement.requestFullscreen();
@@ -430,143 +776,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 应用录制模式样式
-            const mode = recordModeSelect.value;
-            appContainer.classList.add('recording');
-            if (mode === 'greenscreen') {
-                appContainer.classList.add('recording-greenscreen');
-                document.body.classList.add('recording-greenscreen');
-            } else if (mode === 'bluescreen') {
-                appContainer.classList.add('recording-bluescreen');
-                document.body.classList.add('recording-bluescreen');
-            } else if (mode === 'black') {
-                appContainer.classList.add('recording-black');
-                document.body.classList.add('recording-black');
-            }
-
-            recordedChunks = [];
-            try {
-                // 优化点2：尽可能选择高画质编码，并设定极高的比特率（8Mbps）防止歌词模糊
-                const options = { mimeType: 'video/webm;codecs=vp9' };
-                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options.mimeType = 'video/webm';
-                }
-                options.videoBitsPerSecond = 8000000; 
-
-                mediaRecorder = new MediaRecorder(recordStream, options);
-            } catch (e) {
-                showToast('当前浏览器不支持视频录制', 'exclamation-triangle');
-                resetRecordingUI();
-                return;
-            }
-
-            mediaRecorder.ondataavailable = function(e) {
-                if (e.data && e.data.size > 0) {
-                    recordedChunks.push(e.data);
-                }
-            };
-
-            mediaRecorder.onstop = function() {
-                resetRecordingUI();
-                
-                // 导出下载
-                const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const title = songTitleEl.textContent || 'lyrics_video';
-                a.download = `${title}_${mode}.webm`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                }, 100);
-                
-                showToast('视频导出成功！', 'check-circle');
-                
-                // 停止所有的共享轨道
-                if (recordStream) {
-                    recordStream.getTracks().forEach(track => track.stop());
-                }
-                
-                // 退出全屏
-                if (document.fullscreenElement && document.exitFullscreen) {
-                    document.exitFullscreen();
-                    if (fullscreenBtn) fullscreenBtn.innerHTML = '<i class="fas fa-expand"></i>';
-                }
-            };
-
-            // 优化点3：监听歌曲结束，自动停止录制前增加2秒缓冲，防止片尾突兀截断
-            function onAudioEndedForRecord() {
-                setTimeout(() => {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                    }
-                }, 2000);
-                audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
-            }
-            audioPlayer.addEventListener('ended', onAudioEndedForRecord);
-
-            // 监听用户点击系统横幅的"停止共享"
-            if (recordStream.getVideoTracks().length > 0) {
-                recordStream.getVideoTracks()[0].onended = function () {
-                    if (mediaRecorder && mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
-                        audioPlayer.pause();
-                    }
-                    audioPlayer.removeEventListener('ended', onAudioEndedForRecord);
-                };
-            }
-
-            // 初始化音频可视化
+            // 初始化音频上下文 (如果还没的话)
             initVisualizer();
             if (audioCtx && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
-            
-            // 确保音频重头开始并暂停等待
-            audioPlayer.currentTime = 0;
-            audioPlayer.pause();
 
-            // 优化点4：电影级倒计时启动，避免画面突兀闪烁，给浏览器缓冲时间
-            const countdownEl = document.getElementById('countdown-overlay');
-            if (countdownEl) {
-                countdownEl.classList.add('show');
-                let count = 3;
-                countdownEl.textContent = count;
-                
-                // 触发重绘以重新播放动画
-                countdownEl.classList.remove('pop');
-                void countdownEl.offsetWidth; 
-                countdownEl.classList.add('pop');
-
-                const timer = setInterval(() => {
-                    count--;
-                    if (count > 0) {
-                        countdownEl.textContent = count;
-                        countdownEl.classList.remove('pop');
-                        void countdownEl.offsetWidth;
-                        countdownEl.classList.add('pop');
-                    } else {
-                        clearInterval(timer);
-                        countdownEl.classList.remove('show');
-                        
-                        // 倒计时结束后正式开始录制并播放
-                        mediaRecorder.start(100);
-                        audioPlayer.play();
-                        showToast('录制已开始！按 ESC 或退出全屏可提前结束并保存', 'video');
-                    }
-                }, 1000);
+            if (mode === 'screen') {
+                await startScreenRecording(mode);
             } else {
-                // Fallback
-                mediaRecorder.start(100);
-                audioPlayer.play();
+                await startInternalEngineRecording(mode, keepVis, resolutionMode);
             }
         });
-    }
-    
-    // 加载音频
+    }    // 加载音频
     audioInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
