@@ -9,6 +9,18 @@
 </head>
 <body>
     <div class="app-container" id="app">
+        <!-- 动态背景 -->
+        <div class="dynamic-bg"></div>
+        
+        <!-- 拖拽提示遮罩 -->
+        <div class="drag-overlay" id="drag-overlay">
+            <i class="fas fa-file-audio"></i>
+            <p>松开鼠标加载文件</p>
+        </div>
+
+        <!-- Toast 提示 -->
+        <div class="toast-container" id="toast-container"></div>
+
         <!-- 顶部信息栏 -->
         <header class="header">
             <div class="header-left"><i class="fas fa-chevron-down"></i></div>
@@ -29,9 +41,17 @@
         <!-- 底部控制区 -->
         <footer class="controls-container">
             <div class="actions-top">
-                <i class="fas fa-ellipsis-h"></i>
+                <div class="volume-control">
+                    <i class="fas fa-volume-up" id="mute-btn"></i>
+                    <div class="volume-slider-wrapper" id="volume-wrapper">
+                        <div class="volume-bar">
+                            <div class="volume-progress" id="volume-progress"></div>
+                            <div class="volume-thumb" id="volume-thumb"></div>
+                        </div>
+                    </div>
+                </div>
                 <div class="right-actions">
-                    <i class="fas fa-heart" style="color: #ff4d4f;"></i>
+                    <i class="fas fa-heart" id="like-btn" style="color: #ff4d4f;"></i>
                     <i class="fas fa-microphone"></i>
                 </div>
             </div>

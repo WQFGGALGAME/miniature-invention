@@ -30,7 +30,119 @@ body {
     flex-direction: column;
     position: relative;
     color: var(--inactive-color);
-    transition: background-color 0.3s ease;
+    transition: background-color 0.5s ease;
+    overflow: hidden;
+}
+
+.app-container.idle {
+    cursor: none;
+}
+
+.app-container.idle .header,
+.app-container.idle .controls-container {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(20px);
+}
+
+.app-container.idle .header {
+    transform: translateY(-20px);
+}
+
+.header, .controls-container {
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    z-index: 10;
+}
+
+/* 动态背景 */
+.dynamic-bg {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0%, transparent 60%);
+    animation: rotateBg 30s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes rotateBg {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 拖拽遮罩 */
+.drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--active-color);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.drag-overlay.active {
+    opacity: 1;
+}
+
+.drag-overlay i {
+    font-size: 64px;
+    margin-bottom: 20px;
+    animation: bounce 1s infinite alternate;
+}
+
+@keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-15px); }
+}
+
+/* Toast 提示 */
+.toast-container {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    background: rgba(40, 40, 40, 0.95);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 20px;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    animation: slideDown 0.3s ease forwards;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.toast.fade-out {
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: all 0.3s ease;
 }
 
 /* 顶部信息栏 */
@@ -112,26 +224,46 @@ body {
 .lyric-line {
     padding: 18px 10px;
     font-size: calc(var(--lyric-font-size) * 0.8);
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     color: var(--inactive-color);
     line-height: 1.5;
     min-height: 60px; /* 保持空间 */
     cursor: pointer;
     white-space: pre-wrap;
+    word-break: break-word;
+    transform: scale(0.9);
+    opacity: 0.6;
+    filter: blur(1px);
+    transform-origin: center;
 }
 
 .lyric-line:hover {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.8);
+    opacity: 1;
+    filter: blur(0);
 }
 
 .lyric-line.active {
     font-size: var(--lyric-font-size);
+    color: var(--inactive-color);
+    font-weight: bold;
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+    text-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+.lyric-line.active .lyric-word,
+.lyric-line.active .lyric-char {
+    display: inline;
     color: transparent;
-    /* 卡拉OK逐字高亮效果核心CSS */
     background-image: linear-gradient(to right, var(--active-color) 0%, var(--active-color) var(--progress, 0%), var(--inactive-color) var(--progress, 0%), var(--inactive-color) 100%);
     -webkit-background-clip: text;
     background-clip: text;
-    font-weight: 500;
+    /* ensure spaces are preserved when inline */
+    white-space: pre-wrap;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
 }
 
 .placeholder {
@@ -155,8 +287,85 @@ body {
     color: #b0b0b0;
 }
 
+.volume-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    max-width: 150px;
+}
+
+.volume-control i {
+    cursor: pointer;
+    font-size: 18px;
+    width: 24px;
+    text-align: center;
+    transition: color 0.2s;
+}
+
+.volume-control i:hover {
+    color: var(--active-color);
+}
+
+.volume-slider-wrapper {
+    flex: 1;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.volume-bar {
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    position: relative;
+    border-radius: 2px;
+}
+
+.volume-progress {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: var(--active-color);
+    width: 100%;
+    border-radius: 2px;
+}
+
+.volume-thumb {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    background: var(--active-color);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.volume-slider-wrapper:hover .volume-thumb {
+    opacity: 1;
+}
+
+.right-actions {
+    display: flex;
+    gap: 25px;
+}
+
 .right-actions i {
-    margin-left: 25px;
+    cursor: pointer;
+    transition: transform 0.2s, color 0.2s;
+}
+
+.right-actions i:hover {
+    color: var(--active-color);
+}
+
+.right-actions i.active {
+    transform: scale(1.2);
 }
 
 .progress-container {
