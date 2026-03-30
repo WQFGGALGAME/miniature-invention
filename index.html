@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滚动歌词播放器</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container" id="app">
+        <!-- 顶部信息栏 -->
+        <header class="header">
+            <div class="header-left"><i class="fas fa-chevron-down"></i></div>
+            <div class="song-info">
+                <h1 id="song-title">请加载歌曲</h1>
+                <h2 id="song-artist">未知歌手 <span class="tag">关注</span></h2>
+            </div>
+            <div class="header-right" id="settings-btn"><i class="fas fa-share-square"></i></div>
+        </header>
+
+        <!-- 歌词滚动区 -->
+        <main class="lyrics-container" id="lyrics-container">
+            <div class="lyrics-wrapper" id="lyrics-wrapper">
+                <div class="lyric-line placeholder">点击右上角图标，加载歌曲和歌词</div>
+            </div>
+        </main>
+
+        <!-- 底部控制区 -->
+        <footer class="controls-container">
+            <div class="actions-top">
+                <i class="fas fa-ellipsis-h"></i>
+                <div class="right-actions">
+                    <i class="fas fa-heart" style="color: #ff4d4f;"></i>
+                    <i class="fas fa-microphone"></i>
+                </div>
+            </div>
+            
+            <div class="progress-container">
+                <span id="current-time">00:00</span>
+                <div class="progress-bar-wrapper" id="progress-wrapper">
+                    <div class="progress-bar">
+                        <div class="progress" id="progress"></div>
+                        <div class="progress-thumb" id="progress-thumb"></div>
+                    </div>
+                </div>
+                <span id="total-time">00:00</span>
+            </div>
+
+            <div class="playback-controls">
+                <i class="fas fa-random"></i>
+                <i class="fas fa-step-backward" id="prev-btn"></i>
+                <div class="play-btn-wrapper" id="play-btn">
+                    <i class="fas fa-play"></i>
+                </div>
+                <i class="fas fa-step-forward" id="next-btn"></i>
+                <i class="fas fa-list-ul"></i>
+            </div>
+        </footer>
+
+        <!-- 设置弹窗 -->
+        <div class="settings-modal" id="settings-modal">
+            <div class="settings-content">
+                <h3>播放器设置</h3>
+                <div class="setting-item">
+                    <label>加载歌曲文件 (MP3/WAV/FLAC):</label>
+                    <input type="file" id="audio-input" accept="audio/*">
+                </div>
+                <div class="setting-item">
+                    <label>加载歌词文件 (LRC格式):</label>
+                    <input type="file" id="lrc-input" accept=".lrc,.txt">
+                </div>
+                <div class="setting-item">
+                    <label>自定义背景颜色:</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="bg-color-input" value="#1a1a1a">
+                        <span id="bg-color-val">#1a1a1a</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>普通歌词颜色 (未激活):</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="inactive-color-input" value="#888888">
+                        <span id="inactive-color-val">#888888</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>高亮歌词颜色 (激活):</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="active-color-input" value="#ffffff">
+                        <span id="active-color-val">#ffffff</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>歌词字体大小:</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="font-size-input" min="16" max="64" value="28">
+                        <span id="font-size-val">28px</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>时间轴微调 (整体偏移，负数提前，正数延后):</label>
+                    <div class="slider-wrapper">
+                        <input type="range" id="timeline-offset-input" min="-5" max="5" step="0.1" value="0">
+                        <span id="timeline-offset-val">0s</span>
+                    </div>
+                </div>
+                <button id="close-settings" class="close-btn">完成并关闭</button>
+            </div>
+        </div>
+
+        <audio id="audio-player"></audio>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
