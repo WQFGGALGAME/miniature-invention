@@ -251,15 +251,14 @@ body {
     white-space: pre-wrap;
     word-break: break-word;
     transform: scale(0.9);
-    opacity: 0.6;
-    filter: blur(1px);
+    opacity: 1;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
     transform-origin: center;
 }
 
 .lyric-line:hover {
     color: rgba(255, 255, 255, 0.8);
     opacity: 1;
-    filter: blur(0);
 }
 
 .lyric-line.active {
@@ -268,7 +267,6 @@ body {
     font-weight: bold;
     transform: scale(1);
     opacity: 1;
-    filter: blur(0);
     text-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
 

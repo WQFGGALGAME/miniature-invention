@@ -620,7 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 rCtx.textBaseline = 'top'; // 改用 top 对齐，配合 offsetTop 更精准
                 rCtx.font = `${compStyle.fontWeight} ${currentFontSize}px sans-serif`;
                 
-                if (!isActive) rCtx.globalAlpha = 0.6;
+                if (!isActive) rCtx.globalAlpha = 1.0;
                 
                 if (line.spans.length > 0) {
                     line.spans.forEach(span => {
